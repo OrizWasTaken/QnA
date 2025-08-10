@@ -1,0 +1,14 @@
+{% extends "qnas/base.html" %}
+{% block title %}Sign up{% endblock title %}
+
+{% block content %}
+    <h1>Sign up</h1>
+    {% for error in errors.values %}
+        <em>{{ error }}</em>
+    {% endfor %}
+    <form action="{% url "accounts:signup" %}" method="post">
+        {% csrf_token %}
+        {{ form.as_div }}
+        <button>Submit</button>
+    </form>
+{% endblock content %}

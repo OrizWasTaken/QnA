@@ -1,0 +1,42 @@
+{% extends "qnas/base.html" %}
+
+{% block title %}User {{ username }}{% endblock title %}
+{% block content %}
+    <h1>{{ username }}</h1>
+    <form>
+        {% csrf_token %}
+        <label for="username">Username:</label>
+        <input id="username" type="text" value="{{ username }}" readonly>
+    </form>
+    <br/>
+    <form action="{% url "accounts:settings" username %}" method="post">
+        {% csrf_token %}
+        <label>
+            Password:
+            <input type="password" placeholder="Enter Current Password" name="current-password">
+            <input type="password" placeholder="Enter New Password" name="new-password">
+            <button>Change Password</button>
+        </label>
+        <div>
+            {% if error_dict.errors %}
+            <p>Error{% if error_dict.triggered_by != "both" %} with {{ error_dict.triggered_by }}:{% else %}:{% endif %}</p>
+            <ul>
+                {% for error in error_dict.errors %}
+                    <li><em>{{ error }}</em></li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+        </div>
+    </form>
+    <br />
+
+    <form action="{% url "accounts:logout" %}">
+        {% csrf_token %}
+        <button>Log out</button>
+    </form>
+    <br />
+    <form action="{% url "accounts:delete-user" username %}">
+        {% csrf_token %}
+        <button>Delete Account</button>
+    </form>
+{% endblock content %}

@@ -1,0 +1,12 @@
+{% extends "qnas/base.html" %}
+{% block title %}Log in{% endblock title %}
+
+{% block content %}
+    <h1>Log in</h1>
+    <p><em>{{ error }}</em></p>
+    <form action="{% url 'accounts:login' %}" method="POST">
+        {% csrf_token %}
+        {{ form.as_div }}
+        <button>Log in</button>
+    </form>
+{% endblock content %}

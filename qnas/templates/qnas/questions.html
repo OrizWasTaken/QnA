@@ -1,0 +1,29 @@
+{% extends 'qnas/base.html' %}
+{% load humanize %}
+
+{% block title %}{{ tab.capitalize }} Questions{% endblock title %}
+
+{% block content %}
+    <div>
+        <h1>{% block h1 %}{{ tab.capitalize }} Questions{% endblock h1 %}</h1>
+        <p>{% block tag_description %}{% endblock tag_description %}</p>
+    </div>
+    <form action="{{ request.path }}" method="get">
+        <input type="submit" name="tab" value="Newest">
+        <input type="submit" name="tab" value="Popular">
+        <input type="submit" name="tab" value="Unanswered">
+        <a href="{% url 'qnas:ask' %}">Ask Question</a>
+    </form>
+    <p>{{ all_questions|length }} questions</p>
+    <!--List Question-->
+    {% if all_questions %}
+    <ul>
+    {% for question in all_questions %}
+        <li>
+           {% include "qnas/question-card.html" %}
+        </li>
+        <hr />
+    {% endfor %}
+    </ul>
+    {% endif %}
+{% endblock content %}

@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Delete your {{ model }}</title>
+</head>
+<body>
+    <h1>Delete {{ model }}?</h1>
+    <p>Once you delete this {{ model|lower }}, it can’t be restored.</p>
+    <form action="{{ request.path }}" method="post">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ referer }}">
+        <button>Delete</button>
+    </form>
+</body>
+</html>

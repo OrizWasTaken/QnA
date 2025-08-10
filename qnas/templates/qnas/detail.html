@@ -1,0 +1,91 @@
+{% extends 'qnas/base.html' %}
+{% load humanize %}
+
+{% block title %}{{ question.title }}{% endblock title %}
+
+{% block content %}
+    <section class="header">
+        <div>
+            <h1>{{ question.title }}</h1>
+            <a href="{% url 'qnas:ask' %}">Ask Question</a>
+        </div>
+        <div class="stats">
+            <span>Asked {{ question.pub_date|naturaltime }}</span>
+            <span>Modified {{ question.mod_date|naturaltime }}</span>
+            <span>Viewed {{ question.views.count }} time{{ question.views.count|pluralize }}</span>
+        </div>
+    </section>
+    <hr />
+    <section class="body">
+        <p>{{ question.body }}
+            {% if question.author == user %}
+                <a href="{% url 'qnas:edit-question' question.id %}">edit</a>
+                <a href="{% url 'qnas:delete-question' question.id %}">delete</a>
+            {% endif %}
+        </p>
+        <form action="{% url 'qnas:detail' question.id %}" method="post">
+            {% csrf_token %}
+            <button type="submit" name="vote" value="1">
+                {% if vote_META.question_is_upvoted %}<strong>Upvoted</strong>{% else %}Upvote{% endif %}
+            </button>
+            <span>
+                {% if vote_META.question_is_upvoted or voted_META.question_is_downvoted %}
+                    <strong>{{ question.vote_count|default_if_none:0 }}</strong>
+                {% else %}
+                    {{ question.vote_count|default_if_none:0 }}
+                {% endif %}
+            </span>
+            <button type="submit" name="vote" value="-1">
+                {% if vote_META.question_is_downvoted %}<strong>Downvoted</strong>{% else %}Downvote{% endif %}
+            </button>
+        </form>
+    </section>
+    <hr />
+    <!--  New Answer-->
+    <form action="{% url 'qnas:detail' question.id %}" method="POST">
+        {% csrf_token %}
+        {{ form.as_div }}
+        <button>Post Your Answer</button>
+        <hr />
+    </form>
+
+    <!--List Answers -->
+    <section class="answers">
+        {% if question.answers.all %}
+            <span>{{ question.answers.count }}&nbsp;Answers</span>
+            <ul>
+                {% for answer in question.answers.all %}
+                    <li>
+                        <article id="ans-{{ answer.id }}">
+                            {% include "qnas/answer-card.html"%}
+                            <form action="{% url 'qnas:detail' question.id %}" method="post">
+                                {% csrf_token %}
+                                <input type="hidden" name="answer_id" value="{{ answer.id }}">
+                                <button type="submit" name="vote" value="1" >
+                                    {% if answer.id in vote_META.upvoted_ans_ids %}
+                                        <strong>Upvoted</strong>
+                                    {% else %}
+                                        Upvote
+                                    {% endif %}
+                                </button>
+                            </form>
+                            <span>{{ answer.vote_count|default_if_none:0 }}</span>
+                            <form action="{% url 'qnas:detail' question.id %}" method="post">
+                                {% csrf_token %}
+                                <input type="hidden" name="answer_id" value="{{ answer.id }}">
+                                <button type="submit" name="vote" value="-1">
+                                    {% if answer.id in vote_META.downvoted_ans_ids %}
+                                        <strong>Downvoted</strong>
+                                    {% else %}
+                                        Downvote
+                                    {% endif %}
+                                </button>
+                            </form>
+                        </article>
+                        <hr />
+                    </li>
+                {% endfor %}
+            </ul>
+        {% endif %}`
+    </section>
+{% endblock content %}

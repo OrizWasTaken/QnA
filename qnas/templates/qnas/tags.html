@@ -1,0 +1,23 @@
+{% extends 'qnas/base.html' %}
+
+{% block title %}Tags{% endblock title %}
+
+{% block content %}
+    <h1>Tags</h1>
+    <p>
+        A tag is a keyword or label used to group your question with related ones.
+        Choosing appropriate tags helps others discover and respond to your question more easily.
+    </p>
+    <form action="{% url "qnas:tags" %}" method="get">
+        <input type="submit" name="tab" value="Popular">
+        <input type="submit" name="tab" value="Name">
+        <input type="submit" name="tab" value="New">
+    </form>
+    <ul>
+        {% for tag in all_tags %}
+            <li>
+                <a href="{% url "qnas:tagged-questions" tag.text %}">{{ tag }}</a>
+            </li>
+        {% endfor %}
+    </ul>
+{% endblock content %}

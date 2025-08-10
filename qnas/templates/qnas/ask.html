@@ -1,0 +1,12 @@
+{% extends 'qnas/base.html' %}
+
+{% block title %}Ask a question{% endblock title %}
+
+{% block content %}
+    <h1>Ask a Question</h1>
+    <form action="{% url 'qnas:ask' %}" method="post">
+        {% csrf_token %}
+        {{ form.as_div }}
+        <button>Submit</button>
+    </form>
+{% endblock content %}

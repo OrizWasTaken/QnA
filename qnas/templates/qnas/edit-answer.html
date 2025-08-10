@@ -1,0 +1,11 @@
+{% extends 'qnas/base.html' %}
+
+{% block title %}{{ question.title }}{% endblock title %}
+
+{% block content %}
+    <form action="{% url "qnas:edit-answer" answer.id %}" method="post">
+        {% csrf_token %}
+        {{ form.as_div }}
+        <button>Submit</button>
+    </form>
+{% endblock content %}

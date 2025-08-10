@@ -1,0 +1,13 @@
+{% load humanize %}
+
+<p>
+    {{ answer.text }}
+    <br />
+    {% if answer.author == user %}
+        <a href="{% url "qnas:edit-answer" answer.id %}">edit</a>
+        <a href="{% url "qnas:delete-answer" answer.id %}">delete</a>
+    {% endif %}
+    <em>answered {{ answer.pub_date|naturaltime }} by
+        <a href="{% url "accounts:profile" answer.author.username %}">{{ answer.author }}</a>
+    </em>
+</p>

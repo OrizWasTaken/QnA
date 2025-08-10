@@ -1,0 +1,36 @@
+{% extends "qnas/base.html" %}
+{% load humanize %}
+
+{% block title %}User {{ user.username }}{% endblock title %}
+{% block content %}
+    <h1>Profile: <a href="{% url 'accounts:profile' user.username %}">{{ profile_owner.username }}</a></h1>
+    <form action="{{ request.path }}" method="get">
+        {% csrf_token %}
+        <input type="submit" name="tab" value="Overview">
+        <input type="submit" name="tab" value="Questions">
+        <input type="submit" name="tab" value="Answers">
+        <input type="submit" name="tab" value="Saved">
+        <input type="submit" name="tab" value="Upvoted">
+        <input type="submit" name="tab" value="Downvoted">
+        {% if user.username == profile_owner.username %}
+            <a href="{% url "accounts:settings" profile_owner.username %}">settings</a>
+        {% endif %}
+    </form>
+    {% if contents %}
+        <ul>
+            {% for content in contents %}
+                <li>
+                    {% if content.class_name.lower == "question" %}
+                        {% include "qnas/question-card.html" with question=content %}
+                    {% elif content.class_name.lower == "answer" %}
+                        <a href="{% url 'qnas:detail' content.question.id %}#ans-{{ content.id }}">{{ content.question }}</a>
+                        {% include "qnas/answer-card.html" with answer=content %}
+                    {% endif %}
+                </li>
+                <hr />
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>Nothing to see hear.</p>
+    {% endif %}
+{% endblock %}

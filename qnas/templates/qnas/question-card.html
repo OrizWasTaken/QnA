@@ -1,0 +1,31 @@
+{% load humanize %}
+
+<article>
+   <h2><a href="{% url 'qnas:detail' question.id %}">{{ question.title }}</a></h2>
+   <p>{{ question.body|truncatechars:200 }}</p>
+   <div class="tags">
+       {% for tag in question.tags.all %}
+           <span>{{ tag }}</span>
+       {% endfor %}
+   </div>
+   <div class="stats">
+       <span>{{ question.vote_count|default_if_none:0 }} vote{{ question.vote_count|pluralize }};</span>
+       <span>{{ question.answers.count|default_if_none:0 }} answer{{ question.answers.count|pluralize }};</span>
+       <span>{{ question.views.count|default_if_none:0 }} view{{ question.views.count|pluralize }}</span>
+       </div>
+   <div class="user-info">
+       {% if question.author == profile_owner %}
+        <a href="{% url 'qnas:edit-question' question.id %}">edit</a>
+        <a href="{% url 'qnas:delete-question' question.id %}">delete</a>
+       {% endif %}
+       <em>
+           {% if question.is_edited %}
+               edited {{ question.mod_date|naturaltime }}
+           {% else %}
+               asked {{ question.pub_date|naturaltime }}
+           {% endif %}
+           by
+           <a href="{% url "accounts:profile" question.author.username %}">{{ question.author }}</a>
+       </em>
+   </div>
+</article>
