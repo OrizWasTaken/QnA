@@ -1,3 +1,5 @@
+import datetime
+
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.conf import settings
@@ -21,11 +23,11 @@ class Question(models.Model):
 
     @property
     def is_edited(self):
-        return self.pub_date.replace(microsecond=0) < self.mod_date.replace(microsecond=0)
+        return self.mod_date - self.pub_date  >= datetime.timedelta(seconds=1)
 
     @property
     def vote_count(self):
-        return self.votes.aggregate(vote_count=models.Sum('value')).get('vote_count')
+        return self.votes.aggregate(vote_count=models.Sum('value')).get('vote_count') or 0
 
     @property
     def class_name(self):
@@ -43,15 +45,16 @@ class Answer(models.Model):
 
     @property
     def vote_count(self):
-        return self.votes.aggregate(vote_count=models.Sum('value')).get('vote_count')
+        return self.votes.aggregate(vote_count=models.Sum('value')).get('vote_count') or 0
 
     @property
     def class_name(self):
         return self.__class__.__name__
 
     def __str__(self):
-        str_repr = ' '.join([line for line in self.text.splitlines() if line != ''])
-        return str_repr if len(self.text) <= 200 else str_repr[:200] + '...'
+        str_repr = ' '.join(line.strip() for line in self.text.splitlines() if line.strip())
+        return str_repr if len(str_repr) <= 200 else str_repr[:200] + '...'
+
 
 class BaseVote(models.Model):
     UPVOTE = 1
@@ -91,7 +94,7 @@ class View(models.Model):
 
     @property
     def hrs_since_viewed(self):
-        return (timezone.now() - self.view_time).total_seconds() / 60
+        return (timezone.now() - self.view_time).total_seconds() / 3600
 
     def clean(self):
         if not (self.user or self.ip_address):

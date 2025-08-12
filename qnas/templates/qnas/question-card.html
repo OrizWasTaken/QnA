@@ -9,9 +9,9 @@
        {% endfor %}
    </div>
    <div class="stats">
-       <span>{{ question.vote_count|default_if_none:0 }} vote{{ question.vote_count|pluralize }};</span>
-       <span>{{ question.answers.count|default_if_none:0 }} answer{{ question.answers.count|pluralize }};</span>
-       <span>{{ question.views.count|default_if_none:0 }} view{{ question.views.count|pluralize }}</span>
+       <span>{{ question.vote_count }} vote{{ question.vote_count|pluralize }};</span>
+       <span>{{ question.answers.count }} answer{{ question.answers.count|pluralize }};</span>
+       <span>{{ question.views.count }} view{{ question.views.count|pluralize }}</span>
        </div>
    <div class="user-info">
        {% if question.author == profile_owner %}
