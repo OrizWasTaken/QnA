@@ -88,8 +88,8 @@ class AnswerVote(BaseVote):
 
 class View(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, related_name='views', on_delete=models.DO_NOTHING, null=True)
-    question = models.ForeignKey(Question, related_name='views', on_delete=models.CASCADE)
     ip_address = models.GenericIPAddressField(null=True)
+    question = models.ForeignKey(Question, related_name='views', on_delete=models.CASCADE)
     view_time = models.DateTimeField(auto_now_add=True)
 
     @property

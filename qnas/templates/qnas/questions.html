@@ -25,5 +25,7 @@
         <hr />
     {% endfor %}
     </ul>
+    {% else %}
+        <span>Be the first to <a href="{% url 'qnas:ask' %}">ask</a> a question.</span>
     {% endif %}
 {% endblock content %}

@@ -25,7 +25,7 @@
                asked {{ question.pub_date|naturaltime }}
            {% endif %}
            by
-           <a href="{% url "accounts:profile" question.author.username %}">{{ question.author }}</a>
+           <a href="{% url 'accounts:profile' question.author.username %}">{{ question.author }}</a>
        </em>
    </div>
 </article>

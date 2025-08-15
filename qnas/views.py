@@ -9,25 +9,25 @@ from .forms import QuestionForm, AnswerForm
 def index(request):
     return render(request, 'qnas/index.html')
 
-def get_questions_context(request, all_questions):
-    tab = request.GET.get("tab")
-    if not tab:
-        tab = "newest"
-    elif tab.lower() == "unanswered":
-        all_questions = [question for question in all_questions if not question.answers.all()]
+def _get_questions_context(request, all_questions):
+    tab = request.GET.get("tab") or "newest"
+    if tab.lower() == "unanswered":
+        all_questions = [question for question in all_questions if not question.answers.all().exists()]
     elif tab.lower() == "popular":
         all_questions = sorted(all_questions, key=lambda question: question.views.count(), reverse=True)
+    else:
+        tab = "newest"
     return {"all_questions": all_questions, "tab": tab}
 
 def questions(request):
     all_questions = Question.objects.order_by("-pub_date")
-    context = get_questions_context(request, all_questions)
+    context = _get_questions_context(request, all_questions)
     return render(request, "qnas/questions.html", context)
 
 def tagged_questions(request, tag_text):
     tag = get_object_or_404(Tag, text=tag_text)
     all_questions = Question.objects.filter(tags=tag).order_by("-pub_date")
-    context = get_questions_context(request, all_questions)
+    context = _get_questions_context(request, all_questions)
     context.update({"tag": tag})
     return render(request, "qnas/tagged-questions.html", context)
 
