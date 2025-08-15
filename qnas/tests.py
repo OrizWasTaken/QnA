@@ -7,7 +7,8 @@ from django.contrib.auth import get_user_model
 
 from .models import Tag, Question, QuestionVote, Answer, AnswerVote, View
 
-def assert_successful_request(obj, view, query_params=None, **kwargs):
+def _assert_successful_request(obj, view, query_params=None, **kwargs):
+    """send a request to a url and assert that the response is 200 (successful)"""
     response = obj.client.get(reverse(view, kwargs=kwargs), query_params=query_params)
     obj.assertEqual(response.status_code, 200)
     return response
@@ -68,7 +69,7 @@ class AnswerStrMethodTest(TestCase):
 class VoteCountTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.author = get_user_model().objects.create_user(username="author", password="password")
+        cls.author, = get_user_model().objects.bulk_create([get_user_model()(username=f"author")])
         cls.question = Question.objects.create(author=cls.author, title="test_question", body="test_body")
         cls.answer = Answer.objects.create(author=cls.author, question=cls.question, text="test_answer")
 
@@ -84,9 +85,6 @@ class VoteCountTests(TestCase):
         vote_values = (1, -1, 1, 1, -1)
         users = [get_user_model()(username=f"test_user{i}") for i in range(len(vote_values))]
         get_user_model().objects.bulk_create(users)
-
-        # Refresh users from DB to get IDs
-        users = list(get_user_model().objects.filter(username__startswith="test_user"))
 
         votes = [
             vote_model(user=user, value=value, **{fk_field_name: content})
@@ -115,14 +113,17 @@ class ViewModelTests(TestCase):
         )
         self.assertAlmostEqual(view.hrs_since_viewed, 3, places=2) # 3 hrs to 2 d.p
 
-class QuestionListViewsTest(TestCase):
+class QuestionListViewsTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.user = get_user_model().objects.create_user(username="author", password="password")
+        cls.user, = get_user_model().objects.bulk_create((get_user_model()(username=f"author"),))
 
     def _assert_no_question_for(self, view, **kwargs):
-        """If no question exists, an appropriate text should be displayed."""
-        response = assert_successful_request(self, view, **kwargs)
+        """
+        If no question exists, an appropriate text should be displayed.
+        By verifying text, asserts that the respective view functions render the right template.
+        """
+        response = _assert_successful_request(self, view, **kwargs)
         self.assertContains(response, "0 questions")
 
     def _assert_default_filter_for(self, view, **kwargs):
@@ -132,19 +133,19 @@ class QuestionListViewsTest(TestCase):
             kwargs["tag"].questions.add(*questions)
             kwargs = {"tag_text": kwargs["tag"].text}
 
-        def _assert_newest_is_default(query_params=None):
-            response = assert_successful_request(self, view, query_params=query_params, **kwargs)
-            self.assertEqual(response.context["tab"], "newest")
+        def _assert_newest_is_default_tab(query_params=None):
+            response = _assert_successful_request(self, view, query_params=query_params, **kwargs)
+            self.assertEqual(response.context["tab"].lower(), "newest")
             self.assertQuerySetEqual(response.context["all_questions"], reversed(questions))
 
-        with self.subTest("No tab selected"): _assert_newest_is_default()
-        with self.subTest("Selected undefined tab"): _assert_newest_is_default(query_params={"tab": "oldest"})
+        with self.subTest("No tab selected"): _assert_newest_is_default_tab()
+        with self.subTest("Selected undefined tab"): _assert_newest_is_default_tab(query_params={"tab": "oldest"})
 
-    def _assert_defined_tag_for(self, view, **kwargs):
+    def _assert_defined_tabs_for(self, view, **kwargs):
         """
-            questions should be filtered correctly when a defined, existing tag is selected.
-            tab 'unanswered' should filter questions without an answer.
-            tab 'popular' should filter questions by view count in descending order.
+        questions should be filtered correctly when a defined, existing tag is selected.
+        tab 'unanswered' should filter questions without an answer.
+        tab 'popular' should filter questions by view count in descending order.
         """
         questions = Question.objects.bulk_create([Question(author=self.user) for _ in range(3)])
         q1, q2, q3 = questions
@@ -154,15 +155,15 @@ class QuestionListViewsTest(TestCase):
 
         with self.subTest("Tab 'unanswered' selected"):
             q3.answers.create(author=self.user) # create an answer for the last question.
-            response = assert_successful_request(self, view, query_params={"tab": "unanswered"}, **kwargs)
-            self.assertEqual(response.context["tab"], "unanswered")
+            response = _assert_successful_request(self, view, query_params={"tab": "Unanswered"}, **kwargs)
+            self.assertEqual(response.context["tab"], "Unanswered")
             self.assertQuerySetEqual(response.context["all_questions"], (q2, q1)) # `all_questions` should omit q3.
 
         with self.subTest("Tab 'popular' selected"):
-            View.objects.bulk_create([View(user=self.user, question=q3) for _ in range(3)])
-            View.objects.bulk_create([View(user=self.user, question=q1) for _ in range(2)])
-            response = assert_successful_request(self, view, query_params={"tab": "popular"}, **kwargs)
-            self.assertEqual(response.context["tab"], "popular")
+            View.objects.bulk_create([View(user=self.user, question=q3) for _ in range(2)])
+            View.objects.bulk_create([View(user=self.user, question=q1) for _ in range(1)])
+            response = _assert_successful_request(self, view, query_params={"tab": "Popular"}, **kwargs)
+            self.assertEqual(response.context["tab"], "Popular")
             self.assertQuerySetEqual(response.context["all_questions"], (q3, q1, q2)) # questions ordered by views.
 
     def test_tagged_questions_with_nonexistent_tag(self):
@@ -182,8 +183,44 @@ class QuestionListViewsTest(TestCase):
         self._assert_default_filter_for("qnas:tagged-questions", tag=Tag.objects.create(text="test_tag"))
 
     def test_defined_tag_for_questions(self):
-        self._assert_defined_tag_for("qnas:questions")
+        self._assert_defined_tabs_for("qnas:questions")
 
     def test_defined_tag_for_tagged_questions(self):
-        self._assert_defined_tag_for("qnas:tagged-questions", tag=Tag.objects.create(text="test_tag"))
+        self._assert_defined_tabs_for("qnas:tagged-questions", tag=Tag.objects.create(text="test_tag"))
 
+class TagViewTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.user, = get_user_model().objects.bulk_create((get_user_model()(username=f"author"),))
+
+    def test_default_tab_filter(self):
+        """
+        Tab should default to 'popular' if no tab is selected or the selected tab does not exist.
+        """
+        def _assert_popular_is_default_tab(query_params=None):
+            response = _assert_successful_request(self, "qnas:tags", query_params=query_params)
+            self.assertEqual(response.context["tab"].lower(), "popular")
+
+        with self.subTest("No tab selected"): _assert_popular_is_default_tab()
+        with self.subTest("Selected undefined tab"): _assert_popular_is_default_tab(query_params={"tab": "unused"})
+
+    def test_defined_tabs(self):
+        t1, t2, t3 = Tag.objects.bulk_create([Tag(text=str(i)) for i in range(3)])
+        q1, q2 = Question.objects.bulk_create([Question(author=self.user) for _ in range(2)])
+
+        t2.questions.add(q1, q2)
+        t3.questions.add(q1)
+
+        def _assert_selected_tab(tab=None):
+            response = _assert_successful_request(self, "qnas:tags", query_params={"tab": tab})
+            self.assertEqual(response.context["tab"].lower(), tab.lower())
+            return response
+
+        with self.subTest("Tab 'Popular' selected"):
+            self.assertQuerySetEqual(_assert_selected_tab(tab="Popular").context["all_tags"], (t2, t3, t1))
+
+        with self.subTest("Tab 'New' selected"):
+            self.assertQuerySetEqual(_assert_selected_tab(tab="New").context["all_tags"], (t3, t2, t1))
+
+        with self.subTest("Tab 'Name' selected"):
+            self.assertQuerySetEqual(_assert_selected_tab(tab="Name").context["all_tags"], (t1, t2, t3))

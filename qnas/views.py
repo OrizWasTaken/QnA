@@ -10,13 +10,12 @@ def index(request):
     return render(request, 'qnas/index.html')
 
 def _get_questions_context(request, all_questions):
-    tab = request.GET.get("tab") or "newest"
+    tab = request.GET.get("tab") or "Newest"
     if tab.lower() == "unanswered":
         all_questions = [question for question in all_questions if not question.answers.all().exists()]
     elif tab.lower() == "popular":
         all_questions = sorted(all_questions, key=lambda question: question.views.count(), reverse=True)
-    else:
-        tab = "newest"
+    else: tab = "Newest"
     return {"all_questions": all_questions, "tab": tab}
 
 def questions(request):
@@ -33,17 +32,16 @@ def tagged_questions(request, tag_text):
 
 def tags(request): # 'tag'
     all_tags = Tag.objects.all()
-    tab = request.GET.get("tab")
-    if not tab:
-        tab = "popular"
+    tab = request.GET.get("tab") or "Popular"
     if tab.lower() == "popular":
         all_tags = sorted(all_tags, key=lambda tag: tag.questions.count(), reverse=True)
     elif tab.lower() == "new":
         all_tags = all_tags.order_by("-creation_date")
     elif tab.lower() == "name":
         all_tags = all_tags.order_by("text")
-    context = {'all_tags': all_tags}
-    return render(request, 'qnas/tags.html', context)
+    else: tab = "Popular"
+    context = {"all_tags": all_tags, "tab": tab}
+    return render(request, "qnas/tags.html", context)
 
 def _new_answer(request, question):
     form = AnswerForm(request.POST)
