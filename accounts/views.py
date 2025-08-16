@@ -4,6 +4,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.http import Http404
+from django.urls import reverse
 from django.shortcuts import render, get_object_or_404
 from django.shortcuts import redirect
 from django.contrib import auth
@@ -31,12 +32,13 @@ def login(request):
         user = auth.authenticate(username=request.POST['username'], password=request.POST['password'])
         if user:
             auth.login(request, user)
-            return redirect('qnas:index')
+            return redirect(request.POST.get("next"))
         if get_user_model().objects.filter(username=request.POST["username"]):
             error = "The password you entered is incorrect."
         else:
             error = "The username you entered isn't connected to an account."
-    context = {'form':AuthenticationForm(), "error": error}
+    next_url = request.GET.get("next") or reverse("qnas:index")
+    context = {'form':AuthenticationForm(), "error": error, "next": next_url}
     return render(request, 'registration/login.html', context)
 
 @login_required

@@ -113,16 +113,15 @@ def detail(request, question_id):
 
 @login_required
 def ask(request):
-    form = QuestionForm()
     if request.method == "POST":
         form = QuestionForm(request.POST)
         if form.is_valid():
             question = form.save(commit=False)
             question.author = request.user
             question.save()
-            return redirect('qnas:detail', question.id)
-    context = {'form': form}
-    return render(request, 'qnas/ask.html', context)
+            return redirect("qnas:detail", question.id)
+    context = {"form": QuestionForm()}
+    return render(request, "qnas/ask.html", context)
 
 def _validate_owner(request, content):
     if request.user != content.author:
