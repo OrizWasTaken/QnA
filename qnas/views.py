@@ -23,8 +23,8 @@ def questions(request):
     context = _get_questions_context(request, all_questions)
     return render(request, "qnas/questions.html", context)
 
-def tagged_questions(request, tag_text):
-    tag = get_object_or_404(Tag, text=tag_text)
+def tagged_questions(request, tag_id):
+    tag = get_object_or_404(Tag, pk=tag_id)
     all_questions = Question.objects.filter(tags=tag).order_by("-pub_date")
     context = _get_questions_context(request, all_questions)
     context.update({"tag": tag})

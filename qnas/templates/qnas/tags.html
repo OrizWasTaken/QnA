@@ -16,7 +16,7 @@
     <ul>
         {% for tag in all_tags %}
             <li>
-                <a href="{% url "qnas:tagged-questions" tag.text %}">{{ tag }}</a>
+                <a href="{% url "qnas:tagged-questions" tag.id %}">{{ tag }}</a>
             </li>
         {% endfor %}
     </ul>
