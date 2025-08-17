@@ -86,6 +86,13 @@ def _vote(request, question):
         _manage_votes(value, QuestionVote.objects.get_or_create(
             defaults={'value':value}, user=request.user, question=question))
 
+def _get_user_vote_meta(question, user):
+    return({
+        "question_is_upvoted": _question_is_voted(question, user, 1),
+        "question_is_downvoted": _question_is_voted(question, user, -1),
+        "upvoted_ans_ids": _get_voted_ans_ids(user, 1),
+        "downvoted_ans_ids": _get_voted_ans_ids(user, -1)
+    } if user.is_authenticated else {})
 
 def _get_voted_ans_ids(vote_user, vote_value):
     return (ans.id for ans in Answer.objects.filter(votes__user=vote_user, votes__value=int(vote_value)))
@@ -103,12 +110,7 @@ def detail(request, question_id):
         _vote(request, question)
         return redirect("qnas:detail", question.id)
     _manage_views(request, question)
-    vote_meta = {
-        "question_is_upvoted": _question_is_voted(question, user, 1),
-        "question_is_downvoted": _question_is_voted(question, user, -1),
-        "upvoted_ans_ids": _get_voted_ans_ids(user, 1),
-        "downvoted_ans_ids": _get_voted_ans_ids(user, -1)
-    }
+    vote_meta = _get_user_vote_meta(question, user)
     return render(request, "qnas/detail.html", {"question": question, "form": AnswerForm(), "vote_META": vote_meta})
 
 @login_required

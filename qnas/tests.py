@@ -17,7 +17,7 @@ from django.urls import reverse
 from django.contrib.auth import get_user_model
 
 from .models import Tag, Question, QuestionVote, Answer, AnswerVote, View
-from .forms import QuestionForm
+from .forms import QuestionForm, AnswerForm
 
 # ---------------------------
 # Test Helpers
@@ -315,7 +315,7 @@ class QuestionCreateEditTests(TestCase):
     def _assert_returns_form(self, response, empty_form=True):
         """Helper: verify form type + whether it’s empty or pre-populated."""
         self.assertEqual(response.status_code, 200)
-        form = response.context["form"]
+        form = response.context.get("form")
         self.assertIsInstance(form, QuestionForm)
         if empty_form:
             self.assertIsNone(form.instance.pk)
@@ -333,24 +333,24 @@ class QuestionCreateEditTests(TestCase):
 
     def _assert_re_renders_form_on_invalid_submission(self, view, *args, question_for_edit=None):
         """Invalid POST should re-render form and not persist changes."""
-        def _assert_no_commit(new_title):
-            if question_for_edit:
-                self.assertNotEqual(question_for_edit.title, new_title)
-            else:
-                self.assertFalse(Question.objects.exists())
-
         with self.subTest("Missing required field"):
             response = self.client.post(reverse(view, args=args), {"title": "a", "body": "b"})
-            self._assert_returns_form(response, not question_for_edit); _assert_no_commit("a")
+            self._assert_returns_form(response, not question_for_edit)
+            self.assertFalse(Question.objects.filter(title="a", body="b").exists())
 
         with self.subTest("Invalid tag id"):
             response = self.client.post(reverse(view, args=args), {"title": "a", "body": "b", "tags": [999]})
-            self._assert_returns_form(response, not question_for_edit); _assert_no_commit("a")
+            self._assert_returns_form(response, not question_for_edit)
+            self.assertFalse(Question.objects.filter(title="a", body="b").exists())
 
         with self.subTest("Title too long"):
             long_title = "x" * 201
-            response = self.client.post(reverse(view, args=args), {"title": long_title, "body": "b", "tags": [self.tag.pk]})
-            self._assert_returns_form(response, not question_for_edit); _assert_no_commit(long_title)
+            response = self.client.post(
+                reverse(view, args=args),
+                {"title": long_title, "body": "b", "tags": [self.tag.pk]}
+            )
+            self._assert_returns_form(response, not question_for_edit)
+            self.assertFalse(Question.objects.filter(title=long_title, body="b").exists())
 
     def test_ask_invalid_submission(self):
         self._assert_re_renders_form_on_invalid_submission("qnas:ask")
@@ -373,3 +373,61 @@ class QuestionCreateEditTests(TestCase):
     def test_edit_question_valid_submission(self):
         question_factory(self.user)
         self._assert_valid_submission_creates_or_updates("qnas:edit-question", 1)
+
+# ---------------------------
+# View Tests: Editing Answers
+# ---------------------------
+
+class EditAnswerViewTests(TestCase):
+    """
+    Tests for editing answers:
+    - Permissions (anonymous redirects, only authors may edit).
+    - Form validation and behavior on GET/POST.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = user_factory()
+        cls.question = question_factory(cls.user)
+
+    def setUp(self):
+        self.client.force_login(self.user)
+
+    def test_edit_answer_redirects_anonymous_user_to_login(self):
+        _assert_redirects_anonymous_user_to_login(self, "qnas:edit-answer", 1)
+
+    def test_edit_answer_with_nonexistent_answer(self):
+        _asserts_404_for_invalid_id(self, "qnas:edit-answer")
+
+    def test_non_author_cannot_edit_answer(self):
+        _assert_non_author_cannot_modify_content(self, "qnas:edit-answer", answer_factory, self.question)
+
+    def _assert_returns_prepopulated_form(self, response):
+        """Helper: verify form type + whether it’s empty or pre-populated."""
+        form = response.context.get("form")
+        self.assertEqual(response.status_code, 200)
+        self.assertIsInstance(form, AnswerForm)
+        self.assertEqual(form.instance.pk, 1)
+
+    def test_edit_answer_displays_prepopulated_form_on_get(self):
+        answer_factory(self.user, self.question)
+        response = self.client.get(reverse("qnas:edit-answer", args=[1]))
+        self._assert_returns_prepopulated_form(response)
+
+    def test_edit_question_invalid_submission(self):
+        """Invalid POST should re-render form and not persist changes."""
+        answer = answer_factory(self.user, self.question) # answer.text = test_answer
+        response = self.client.post(reverse("qnas:edit-answer", args=[1]), {"text": ""})
+        answer.refresh_from_db()
+        self._assert_returns_prepopulated_form(response)
+        self.assertNotEqual(answer.text, "")
+        self.assertEqual(answer.text, "test_answer")
+
+    def test_answer_question_valid_submission(self):
+        """Valid POST should edit answer then redirect to detail page."""
+        answer_factory(self.user, self.question) # answer.text = test_answer
+        response = self.client.post(reverse("qnas:edit-answer", args=[1]), {"text": "Text, text, text."})
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Answer.objects.filter(text="test_answer").exists())
+        self.assertTrue(Answer.objects.filter(text="Text, text, text.").exists())
+        self.assertRedirects(response, reverse("qnas:detail", args=[1]))
