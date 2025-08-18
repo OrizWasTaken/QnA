@@ -19,13 +19,14 @@ from django.contrib.auth import get_user_model
 from .models import Tag, Question, QuestionVote, Answer, AnswerVote, View
 from .forms import QuestionForm, AnswerForm
 
+
 # ---------------------------
 # Test Helpers
 # ---------------------------
 
-def _assert_successful_get_request(obj, view, *reverse_args, query_params=None):
+def _assert_successful_get_request(obj, url, query_params=None):
     """Utility: Send a GET request to the given view and assert a 200 OK response."""
-    response = obj.client.get(reverse(view, args=reverse_args), query_params=query_params)
+    response = obj.client.get(url, query_params=query_params)
     obj.assertEqual(response.status_code, 200)
     return response
 
@@ -35,12 +36,11 @@ def _asserts_404_for_invalid_id(obj, view, method="GET", data=None):
     response = obj.client.get(requested_url) if method.lower() == "get" else obj.client.post(requested_url, data=data)
     obj.assertEqual(response.status_code, 404)
 
-def _assert_redirects_anonymous_user_to_login(obj, view, *view_args):
+def _assert_redirects_anonymous_user_to_login(obj, url):
     """Utility: Assert that anonymous users are redirected to login page when accessing protected views."""
     obj.client.logout()
-    requested_url = reverse(view, args=view_args)
-    response = obj.client.get(requested_url)
-    login_url = reverse("accounts:login", query={"next": requested_url})
+    response = obj.client.get(url)
+    login_url = reverse("accounts:login", query={"next": url})
     obj.assertRedirects(response, login_url)
 
 def _assert_non_author_cannot_modify_content(obj, view, content_factory, *factory_args):
@@ -179,18 +179,21 @@ class QuestionListViewsTests(TestCase):
     def setUpTestData(cls):
         cls.user = user_factory()
         cls.tag = tag_factory()
+        cls.questions_url = reverse("qnas:questions")
+        cls.tagged_questions_url = reverse("qnas:tagged-questions", args=(1,))
 
-    def _assert_no_question_for(self, view, *args):
-        response = _assert_successful_get_request(self, view, *args)
+    def _assert_no_question_for(self, url):
+        response = _assert_successful_get_request(self, url)
         self.assertContains(response, "0 questions")
 
-    def _assert_default_filter_for(self, view, *args):
+    def _assert_default_filter_for(self, url, tagged=False):
         """Ensure 'Newest' is default when tab is missing or invalid."""
         questions = question_factory(self.user, 3)
-        if args: self.tag.questions.add(*questions)
+        if tagged:
+            self.tag.questions.add(*questions)
 
         def _assert_newest(query_params=None):
-            response = _assert_successful_get_request(self, view, *args, query_params=query_params)
+            response = _assert_successful_get_request(self, url, query_params=query_params)
             self.assertEqual(response.context["tab"].lower(), "newest")
             self.assertQuerySetEqual(response.context["all_questions"], reversed(questions))
 
@@ -199,20 +202,20 @@ class QuestionListViewsTests(TestCase):
         with self.subTest("Invalid tab selected"):
             _assert_newest({"tab": "invalid"})
 
-    def _assert_defined_tabs_for(self, view, *args):
+    def _assert_defined_tabs_for(self, url, tagged=False):
         """Ensure 'Unanswered' shows only unanswered, 'Popular' sorts by view count."""
         q1, q2, q3 = question_factory(self.user, 3)
-        if args: self.tag.questions.add(q1, q2, q3)
+        if tagged: self.tag.questions.add(q1, q2, q3)
 
         with self.subTest("Unanswered tab"):
             q3.answers.create(author=self.user)
-            response = _assert_successful_get_request(self, view, *args, query_params={"tab": "Unanswered"})
+            response = _assert_successful_get_request(self, url, query_params={"tab": "Unanswered"})
             self.assertEqual(list(response.context["all_questions"]), [q2, q1])
 
         with self.subTest("Popular tab"):
             View.objects.bulk_create([View(user=self.user, question=q3) for _ in range(2)])
             View.objects.bulk_create([View(user=self.user, question=q1)])
-            response = _assert_successful_get_request(self, view, *args, query_params={"tab": "Popular"})
+            response = _assert_successful_get_request(self, url, query_params={"tab": "Popular"})
             self.assertEqual(list(response.context["all_questions"]), [q3, q1, q2])
 
     # Individual tests
@@ -220,22 +223,22 @@ class QuestionListViewsTests(TestCase):
         _asserts_404_for_invalid_id(self, "qnas:tagged-questions")
 
     def test_no_question_for_tagged_questions(self):
-        self._assert_no_question_for("qnas:tagged-questions", self.tag.id)
+        self._assert_no_question_for(self.tagged_questions_url)
 
     def test_no_question_for_questions(self):
-        self._assert_no_question_for("qnas:questions")
+        self._assert_no_question_for(self.questions_url)
 
     def test_default_filter_for_questions(self):
-        self._assert_default_filter_for("qnas:questions")
+        self._assert_default_filter_for(self.questions_url)
 
     def test_default_filter_for_tagged_questions(self):
-        self._assert_default_filter_for("qnas:tagged-questions", self.tag.id)
+        self._assert_default_filter_for(self.tagged_questions_url, True)
 
     def test_defined_tabs_for_questions(self):
-        self._assert_defined_tabs_for("qnas:questions")
+        self._assert_defined_tabs_for(self.questions_url)
 
     def test_defined_tabs_for_tagged_questions(self):
-        self._assert_defined_tabs_for("qnas:tagged-questions", self.tag.id)
+        self._assert_defined_tabs_for(self.tagged_questions_url, True)
 
 
 # ---------------------------
@@ -248,11 +251,12 @@ class TagViewTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.user = user_factory()
+        cls.tags_url = reverse("qnas:tags")
 
     def test_default_tab_filter(self):
         """Default tab should be 'popular' when missing or invalid."""
         def _assert_popular(query_params=None):
-            response = _assert_successful_get_request(self, "qnas:tags", query_params=query_params)
+            response = _assert_successful_get_request(self, self.tags_url, query_params=query_params)
             self.assertEqual(response.context["tab"].lower(), "popular")
 
         with self.subTest("No tab selected"):
@@ -267,7 +271,7 @@ class TagViewTests(TestCase):
         t2.questions.add(q1, q2); t3.questions.add(q1)
 
         def _assert_tab(tab):
-            response = _assert_successful_get_request(self, "qnas:tags", query_params={"tab": tab})
+            response = _assert_successful_get_request(self, self.tags_url, query_params={"tab": tab})
             self.assertEqual(response.context["tab"].lower(), tab.lower())
             return response
 
@@ -296,15 +300,17 @@ class QuestionCreateEditTests(TestCase):
     def setUpTestData(cls):
         cls.user = user_factory()
         cls.tag = tag_factory()
+        cls.ask_url = reverse("qnas:ask")
+        cls.edit_question_url = reverse("qnas:edit-question", args=(1,))
 
     def setUp(self):
         self.client.force_login(self.user)
 
     def test_ask_redirects_anonymous_user_to_login(self):
-        _assert_redirects_anonymous_user_to_login(self, "qnas:ask")
+        _assert_redirects_anonymous_user_to_login(self, self.ask_url)
 
     def test_edit_question_redirects_anonymous_user_to_login(self):
-        _assert_redirects_anonymous_user_to_login(self, "qnas:edit-question", 1)
+        _assert_redirects_anonymous_user_to_login(self, self.edit_question_url)
 
     def test_edit_question_with_nonexistent_question(self):
         _asserts_404_for_invalid_id(self, "qnas:edit-question")
@@ -323,56 +329,52 @@ class QuestionCreateEditTests(TestCase):
             self.assertEqual(form.instance.pk, 1)
 
     def test_ask_displays_empty_form_on_get(self):
-        response = self.client.get(reverse("qnas:ask"))
+        response = self.client.get(self.ask_url)
         self._assert_returns_form(response)
 
     def test_edit_question_displays_prepopulated_form_on_get(self):
         question_factory(self.user)
-        response = self.client.get(reverse("qnas:edit-question", args=[1]))
+        response = self.client.get(self.edit_question_url)
         self._assert_returns_form(response, False)
 
-    def _assert_re_renders_form_on_invalid_submission(self, view, *args, question_for_edit=None):
+    def _assert_re_renders_form_on_invalid_submission(self, url, question_for_edit=None):
         """Invalid POST should re-render form and not persist changes."""
         with self.subTest("Missing required field"):
-            response = self.client.post(reverse(view, args=args), {"title": "a", "body": "b"})
+            response = self.client.post(url, {"title": "a", "body": "b"})
             self._assert_returns_form(response, not question_for_edit)
             self.assertFalse(Question.objects.filter(title="a", body="b").exists())
 
         with self.subTest("Invalid tag id"):
-            response = self.client.post(reverse(view, args=args), {"title": "a", "body": "b", "tags": [999]})
+            response = self.client.post(url, {"title": "a", "body": "b", "tags": [999]})
             self._assert_returns_form(response, not question_for_edit)
             self.assertFalse(Question.objects.filter(title="a", body="b").exists())
 
         with self.subTest("Title too long"):
             long_title = "x" * 201
-            response = self.client.post(
-                reverse(view, args=args),
-                {"title": long_title, "body": "b", "tags": [self.tag.pk]}
-            )
+            response = self.client.post(url, {"title": long_title, "body": "b", "tags": [self.tag.pk]})
             self._assert_returns_form(response, not question_for_edit)
             self.assertFalse(Question.objects.filter(title=long_title, body="b").exists())
 
     def test_ask_invalid_submission(self):
-        self._assert_re_renders_form_on_invalid_submission("qnas:ask")
+        self._assert_re_renders_form_on_invalid_submission(self.ask_url)
 
     def test_edit_question_invalid_submission(self):
         q = question_factory(self.user)
-        self._assert_re_renders_form_on_invalid_submission("qnas:edit-question", 1, question_for_edit=q)
+        self._assert_re_renders_form_on_invalid_submission(self.edit_question_url, question_for_edit=q)
 
-    def _assert_valid_submission_creates_or_updates(self, view, *args):
+    def _assert_valid_submission_creates_or_updates(self, url):
         """Valid POST should create/edit question then redirect to detail page."""
-        response = self.client.post(reverse(view, args=args),
-            {"title": "title", "body": "body", "tags": [self.tag.pk]})
+        response = self.client.post(url, {"title": "title", "body": "body", "tags": (1,)})
         self.assertEqual(response.status_code, 302)
         self.assertTrue(Question.objects.filter(title="title", body="body").exists())
-        self.assertRedirects(response, reverse("qnas:detail", args=[1]))
+        self.assertRedirects(response, reverse("qnas:detail", args=(1,)))
 
     def test_ask_valid_submission(self):
-        self._assert_valid_submission_creates_or_updates("qnas:ask")
+        self._assert_valid_submission_creates_or_updates(self.ask_url)
 
     def test_edit_question_valid_submission(self):
         question_factory(self.user)
-        self._assert_valid_submission_creates_or_updates("qnas:edit-question", 1)
+        self._assert_valid_submission_creates_or_updates(self.edit_question_url)
 
 # ---------------------------
 # View Tests: Editing Answers
@@ -389,12 +391,13 @@ class EditAnswerViewTests(TestCase):
     def setUpTestData(cls):
         cls.user = user_factory()
         cls.question = question_factory(cls.user)
+        cls.edit_answer_url = reverse("qnas:edit-answer", args=(1,))
 
     def setUp(self):
         self.client.force_login(self.user)
 
     def test_edit_answer_redirects_anonymous_user_to_login(self):
-        _assert_redirects_anonymous_user_to_login(self, "qnas:edit-answer", 1)
+        _assert_redirects_anonymous_user_to_login(self, self.edit_answer_url)
 
     def test_edit_answer_with_nonexistent_answer(self):
         _asserts_404_for_invalid_id(self, "qnas:edit-answer")
@@ -411,13 +414,13 @@ class EditAnswerViewTests(TestCase):
 
     def test_edit_answer_displays_prepopulated_form_on_get(self):
         answer_factory(self.user, self.question)
-        response = self.client.get(reverse("qnas:edit-answer", args=[1]))
+        response = self.client.get(self.edit_answer_url)
         self._assert_returns_prepopulated_form(response)
 
     def test_edit_question_invalid_submission(self):
         """Invalid POST should re-render form and not persist changes."""
         answer = answer_factory(self.user, self.question) # answer.text = test_answer
-        response = self.client.post(reverse("qnas:edit-answer", args=[1]), {"text": ""})
+        response = self.client.post(self.edit_answer_url, {"text": ""})
         answer.refresh_from_db()
         self._assert_returns_prepopulated_form(response)
         self.assertNotEqual(answer.text, "")
@@ -426,8 +429,7 @@ class EditAnswerViewTests(TestCase):
     def test_answer_question_valid_submission(self):
         """Valid POST should edit answer then redirect to detail page."""
         answer_factory(self.user, self.question) # answer.text = test_answer
-        response = self.client.post(reverse("qnas:edit-answer", args=[1]), {"text": "Text, text, text."})
-        self.assertEqual(response.status_code, 302)
+        response = self.client.post(self.edit_answer_url, {"text": "Text, text, text."})
         self.assertFalse(Answer.objects.filter(text="test_answer").exists())
         self.assertTrue(Answer.objects.filter(text="Text, text, text.").exists())
-        self.assertRedirects(response, reverse("qnas:detail", args=[1]))
+        self.assertRedirects(response, reverse("qnas:detail", args=(1,)))

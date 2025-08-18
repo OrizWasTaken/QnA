@@ -2,9 +2,15 @@ from django.http import Http404
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.urls import reverse
+from django.test import Client
 
 from .models import Question, Answer, Tag, QuestionVote, AnswerVote, View
 from .forms import QuestionForm, AnswerForm
+
+client = Client()
+def url_returns_ok(path):
+    response = client.get(path)
+    return response.status_code == 200
 
 def index(request):
     return render(request, 'qnas/index.html')
@@ -154,26 +160,22 @@ def edit_answer(request, answer_id):
     context = {"form": AnswerForm(instance=answer), "question": question, "answer": answer}
     return render(request, "qnas/edit-answer.html", context)
 
-def _del_content(request, content, *default_redirect_url, forbidden_url=None):
+def _del_content(request, content, default_redirect_url, forbidden_url=None):
     _validate_owner(request, content)
     if request.method == "POST":
         content.delete()
-        next_url = request.POST.get("next")
-        if next_url in ("None", forbidden_url):
-            url = default_redirect_url
-        else:
-            url = (next_url,)
-        return redirect(*url)
-    context = {"content": content, "model": content.class_name, "referer": request.META.get('HTTP_REFERER')}
+        post_next = request.POST.get("next")
+        next_url = post_next if url_returns_ok(post_next) else default_redirect_url
+        return redirect(*next_url)
+    context = {"content": content, "model": content.class_name, "referer": request.META.get('HTTP_REFERER') or ""}
     return render(request, "qnas/confirm-deletion.html", context)
 
 @login_required
 def delete_question(request, question_id):
     question = get_object_or_404(Question, pk=question_id)
-    forbidden_url = request.build_absolute_uri(reverse("qnas:detail", args=[question.id]))
-    return _del_content(request, question, "qnas:questions", forbidden_url=forbidden_url)
+    return _del_content(request, question, reverse("qnas:questions"))
 
 @login_required
 def delete_answer(request, answer_id):
     answer = get_object_or_404(Answer, pk=answer_id)
-    return _del_content(request, answer, "qnas:detail", answer.question.id)
+    return _del_content(request, answer, reverse("qnas:detail", answer.question.id))
