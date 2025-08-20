@@ -9,7 +9,7 @@
     <p>Once you delete this {{ model|lower }}, it can’t be restored.</p>
     <form action="{{ request.path }}" method="post">
         {% csrf_token %}
-        <input type="hidden" name="next" value="{{ referer }}">
+        <input type="hidden" name="referer" value="{{ referer }}">
         <button>Delete</button>
     </form>
 </body>

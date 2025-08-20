@@ -160,13 +160,13 @@ def edit_answer(request, answer_id):
     context = {"form": AnswerForm(instance=answer), "question": question, "answer": answer}
     return render(request, "qnas/edit-answer.html", context)
 
-def _del_content(request, content, default_redirect_url, forbidden_url=None):
+def _del_content(request, content, default_redirect_url):
     _validate_owner(request, content)
     if request.method == "POST":
         content.delete()
-        post_next = request.POST.get("next")
-        next_url = post_next if url_returns_ok(post_next) else default_redirect_url
-        return redirect(*next_url)
+        referer = request.POST.get("referer")
+        next_url = referer if url_returns_ok(referer) else default_redirect_url
+        return redirect(next_url)
     context = {"content": content, "model": content.class_name, "referer": request.META.get('HTTP_REFERER') or ""}
     return render(request, "qnas/confirm-deletion.html", context)
 
@@ -178,4 +178,4 @@ def delete_question(request, question_id):
 @login_required
 def delete_answer(request, answer_id):
     answer = get_object_or_404(Answer, pk=answer_id)
-    return _del_content(request, answer, reverse("qnas:detail", answer.question.id))
+    return _del_content(request, answer, reverse("qnas:detail", args=(answer.question.id,)))
