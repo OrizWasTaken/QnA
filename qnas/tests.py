@@ -23,10 +23,10 @@ from .forms import QuestionForm, AnswerForm
 # Test Helpers (merged + improved)
 # ---------------------------
 
-def _assert_redirects_anonymous_user_to_login(obj, url):
+def _assert_redirects_anonymous_user_to_login(obj, url, post_only=False):
     obj.client.logout()
-    response = obj.client.get(url)
-    login_url = reverse("accounts:login", query={"next": url})
+    response = obj.client.get(url) if not post_only else obj.client.post(url)
+    login_url = reverse("accounts:login", query={"next": url if not post_only else ""})
     obj.assertRedirects(response, login_url)
 
 def _assert_successful_get_request(obj, url, query_params=None):
@@ -448,7 +448,7 @@ class EditAnswerViewTests(TestCase):
 # View Tests: Deleting Questions and Answer
 # ---------------------------
 
-class DeleteViewsTest(TestCase):
+class DeleteViewsTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.user = user_factory()
@@ -516,4 +516,116 @@ class DeleteViewsTest(TestCase):
         referer = reverse("qnas:index")
         response = self.client.post(self.del_answer_url, data={"referer": referer})
         self.assertRedirects(response, referer)
+
+# ---------------------------
+# View Tests: The Detail page
+# ---------------------------
+
+class DetailViewTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = user_factory()
+        cls.question = question_factory(cls.user)
+        cls.detail_url = reverse("qnas:detail", args=(cls.question.id,))
+        cls.answer = answer_factory(cls.user, cls.question)
+
+    def test_get_detail_adds_view_for_anonymous(self):
+        """Anonymous visitors should create a view tracked by IP once per hour."""
+        self.client.get(self.detail_url, REMOTE_ADDR="1.2.3.4")
+        self.assertEqual(View.objects.filter(question=self.question).count(), 1)
+
+        # Repeat immediately → no new view
+        self.client.get(self.detail_url, REMOTE_ADDR="1.2.3.4")
+        self.assertEqual(View.objects.filter(question=self.question).count(), 1)
+
+        # Pretend an hour has passed
+        v = View.objects.first()
+        v.view_time = timezone.now() - datetime.timedelta(hours=2)
+        v.save()
+
+        self.client.get(self.detail_url, REMOTE_ADDR="1.2.3.4")
+        self.assertEqual(View.objects.filter(question=self.question).count(), 2)
+
+    def test_get_detail_authenticated_user_view(self):
+        """Authenticated users track views by user instead of IP."""
+        self.client.force_login(self.user)
+        self.client.get(self.detail_url)
+        self.assertTrue(View.objects.filter(user=self.user, question=self.question).exists())
+
+    def test_post_redirects_to_login_if_not_authenticated(self):
+        """POST without login should redirect to login page."""
+        _assert_redirects_anonymous_user_to_login(self, self.detail_url, True)
+
+    def test_post_creates_answer_when_authenticated(self):
+        """Logged-in users can post an answer with valid form."""
+        self.client.force_login(self.user)
+        resp = self.client.post(self.detail_url, {"text": "My first answer"})
+        self.assertRedirects(resp, self.detail_url)
+        self.assertTrue(Answer.objects.filter(text="My first answer", question=self.question).exists())
+
+    def test_post_invalid_answer_does_not_save(self):
+        """Invalid form data should not create an answer."""
+        self.client.force_login(self.user)
+        self.client.post(self.detail_url, {"body": ""})  # Assume body is required
+        self.assertEqual(Answer.objects.count(), 1) # 1 for self.answer
+
+    def test_post_upvote_question(self):
+        """User can upvote a question."""
+        self.client.force_login(self.user)
+        self.client.post(self.detail_url, {"vote": "1"})
+        self.assertTrue(QuestionVote.objects.filter(user=self.user, question=self.question, value=1).exists())
+
+    def test_post_toggle_question_vote_removes_vote(self):
+        """Posting same vote twice should remove it (toggle)."""
+        self.client.force_login(self.user)
+        self.client.post(self.detail_url, {"vote": "1"})
+        self.client.post(self.detail_url, {"vote": "1"})
+        self.assertFalse(QuestionVote.objects.filter(user=self.user, question=self.question).exists())
+
+    def test_post_upvote_answer(self):
+        """User can upvote an answer separately."""
+        self.client.force_login(self.user)
+        self.client.post(self.detail_url, {"vote": "1", "answer_id": self.answer.id})
+        self.assertTrue(AnswerVote.objects.filter(user=self.user, answer=self.answer, value=1).exists())
+
+    def test_get_detail_context_contains_form_and_vote_meta(self):
+        """GET response should include an AnswerForm and vote_META in context."""
+        self.client.force_login(self.user)
+        resp = self.client.get(self.detail_url)
+        self.assertIn("form", resp.context)
+        self.assertIsInstance(resp.context["form"], AnswerForm)
+        self.assertIn("vote_META", resp.context)
+        self.assertIsInstance(resp.context["vote_META"], dict)
+
+    def test_post_toggle_answer_vote_removes_vote(self):
+        """Voting the same value on an answer twice should remove the vote."""
+        self.client.force_login(self.user)
+        self.client.post(self.detail_url, {"vote": "1", "answer_id": self.answer.id})
+        self.assertTrue(AnswerVote.objects.filter(user=self.user, answer=self.answer.id).exists())
+
+        # Second identical vote should delete it
+        self.client.post(self.detail_url, {"vote": "1", "answer_id": self.answer.id})
+        self.assertFalse(AnswerVote.objects.filter(user=self.user, answer=self.answer.id).exists())
+
+    def test_post_downvote_question_and_answer(self):
+        """Users can downvote both questions and answers."""
+        self.client.force_login(self.user)
+
+        self.client.post(self.detail_url, {"vote": "-1"})
+        self.assertTrue(QuestionVote.objects.filter(user=self.user, question=self.question, value=-1).exists())
+
+        self.client.post(self.detail_url, {"vote": "-1", "answer_id": self.answer.id})
+        self.assertTrue(AnswerVote.objects.filter(user=self.user, answer=self.answer, value=-1).exists())
+
+    def test_anonymous_post_creates_nothing(self):
+        """Anonymous POST should not create answers or votes."""
+        self.client.post(self.detail_url, {"body": "Anon try", "vote": "1"})
+        self.assertEqual(Answer.objects.count(), 1) # 1 for self.answer
+        self.assertEqual(QuestionVote.objects.count(), 0)
+        self.assertEqual(AnswerVote.objects.count(), 0)
+
+    def test_get_detail_uses_forwarded_for_header(self):
+        """When behind a proxy, X_FORWARDED_FOR is used instead of REMOTE_ADDR."""
+        self.client.get(self.detail_url, HTTP_X_FORWARDED_FOR="9.8.7.6")
+        self.assertTrue(View.objects.filter(ip_address="9.8.7.6", question=self.question).exists())
 
